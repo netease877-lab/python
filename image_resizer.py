@@ -23,9 +23,10 @@ import sv_ttk
 APP_NAME    = "图片缩放工具 v1.0"
 
 # 修复单文件打包后配置保存到临时目录的BUG
-if getattr(sys, 'frozen', False):
+# PyInstaller 设置 sys.frozen; Nuitka 设置 __compiled__
+if getattr(sys, 'frozen', False) or "__compiled__" in dir():
     # 打包后的可执行文件所在真实目录
-    base_dir = os.path.dirname(sys.executable)
+    base_dir = os.path.dirname(os.path.abspath(sys.executable))
 else:
     # 源码运行所在目录
     base_dir = os.path.dirname(os.path.abspath(__file__))
