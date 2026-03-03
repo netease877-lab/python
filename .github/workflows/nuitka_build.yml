@@ -1,0 +1,41 @@
+name: Build Image Resizer (Nuitka)
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Nuitka and Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install nuitka zstandard pillow sv_ttk
+
+      - name: Compile EXE
+        run: |
+          $SV_TTK = python -c "import sv_ttk, os; print(os.path.dirname(sv_ttk.__file__))"
+          echo "Found sv_ttk at $SV_TTK"
+          
+          python -m nuitka `
+            --onefile `
+            --windows-console-mode=disable `
+            --include-data-dir="$SV_TTK=sv_ttk" `
+            --enable-plugin=tk-inter `
+            --assume-yes-for-downloads `
+            --output-filename="ImageResizer_Nuitka.exe" `
+            image_resizer.py
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ImageResizer-Windows-Nuitka
+          path: ImageResizer_Nuitka.exe
