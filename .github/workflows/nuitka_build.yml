@@ -28,6 +28,7 @@ jobs:
           python -m nuitka `
             --onefile `
             --windows-console-mode=disable `
+            --windows-icon-from-ico="app_icon.ico" `
             --include-data-dir="$SV_TTK=sv_ttk" `
             --enable-plugin=tk-inter `
             --assume-yes-for-downloads `
