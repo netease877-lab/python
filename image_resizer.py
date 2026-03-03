@@ -21,7 +21,16 @@ import sv_ttk
 #  常量
 # ─────────────────────────────────────────────
 APP_NAME    = "图片缩放工具 v1.0"
-INI_FILE    = os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings.ini")
+
+# 修复单文件打包后配置保存到临时目录的BUG
+if getattr(sys, 'frozen', False):
+    # 打包后的可执行文件所在真实目录
+    base_dir = os.path.dirname(sys.executable)
+else:
+    # 源码运行所在目录
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    
+INI_FILE    = os.path.join(base_dir, "settings.ini")
 IMG_EXTS    = (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff", ".tif")
 
 DEFAULT_SETTINGS = {
