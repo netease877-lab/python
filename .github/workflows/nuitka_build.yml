@@ -17,13 +17,18 @@ jobs:
           sudo rm -rf /opt/hostedtoolcache/CodeQL
           sudo apt-get clean
           
-      - name: Install Dependencies (Including User Fix)
+      - name: Install Dependencies (keep system deps, avoid sudo pip upgrades)
         run: |
           sudo apt-get update
-          # 完美融合你的修复方案：强力注入 patchelf
-          sudo apt-get install -y cmake build-essential git python3-pip python3-dev patchelf
-          # 升级 setuptools 和 wheel，修复 bdist_wheel 问题
-          sudo python3 -m pip install --break-system-packages --upgrade setuptools wheel
+          sudo apt-get install -y cmake build-essential git python3-venv python3-dev patchelf
+
+      - name: Create and activate Python virtualenv for build
+        run: |
+          python3 -m venv .venv
+          echo "${GITHUB_WORKSPACE}/.venv/bin" >> $GITHUB_PATH
+          # 使用 venv 中的 python 明确升级 pip/setuptools/wheel（不会触碰系统包）
+          ${GITHUB_WORKSPACE}/.venv/bin/python -m pip install --upgrade pip setuptools wheel
+
       - name: Clone OpenVINO Source
         run: |
           git clone --recurse-submodules https://github.com/openvinotoolkit/openvino.git
@@ -32,13 +37,12 @@ jobs:
         run: |
           cd openvino
           mkdir build && cd build
-          # 核心魔法：强制关闭 AVX2 和 AVX512F，确保完美兼容 N6000 老架构 CPU
           cmake .. \
             -DCMAKE_BUILD_TYPE=Release \
             -DENABLE_AVX2=OFF \
             -DENABLE_AVX512F=OFF \
             -DENABLE_PYTHON=ON \
-            -DPYTHON_EXECUTABLE=/usr/bin/python3 \
+            -DPYTHON_EXECUTABLE=${GITHUB_WORKSPACE}/.venv/bin/python \
             -DENABLE_WHEEL=ON
           make -j$(nproc)
           
@@ -51,7 +55,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DOpenVINO_DIR=${GITHUB_WORKSPACE}/openvino/build \
             -DENABLE_PYTHON=ON \
-            -DPYTHON_EXECUTABLE=/usr/bin/python3 \
+            -DPYTHON_EXECUTABLE=${GITHUB_WORKSPACE}/.venv/bin/python \
             -DENABLE_WHEEL=ON
           make -j$(nproc)
           
@@ -59,7 +63,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: n6000_openvino_wheels
-          # 使用通配符精准抓取编译出来的 Python 安装包
           path: |
             openvino/build/**/*.whl
             openvino.genai/build/**/*.whl
