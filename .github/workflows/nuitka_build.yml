@@ -23,7 +23,7 @@ jobs:
           # 完美融合你的修复方案：强力注入 patchelf
           sudo apt-get install -y cmake build-essential git python3-pip python3-dev patchelf
           # 升级 setuptools 和 wheel，修复 bdist_wheel 问题
-          sudo python3 -m pip install --upgrade setuptools wheel
+          sudo python3 -m pip install --break-system-packages --upgrade setuptools wheel
       - name: Clone OpenVINO Source
         run: |
           git clone --recurse-submodules https://github.com/openvinotoolkit/openvino.git
