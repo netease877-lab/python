@@ -44,7 +44,7 @@ jobs:
           ${GITHUB_WORKSPACE}/.venv/bin/python -m pip install --upgrade pip setuptools wheel build pybind11 cython pybind11-stubgen==2.5.5
 
       - name: Clone OpenVINO
-        run: git clone --recurse-submodules https://github.com/openvinotoolkit/openvino.git
+        run: git clone --recurse-submodules https://github.com/openvinotoolkit/openvino/tree/2026.0.0.git
 
       - name: Build OpenVINO with working ccache
         run: |
