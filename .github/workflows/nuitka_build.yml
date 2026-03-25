@@ -17,17 +17,26 @@ jobs:
           sudo rm -rf /opt/hostedtoolcache/CodeQL
           sudo apt-get clean
           
-      - name: Install Dependencies (keep system deps, avoid sudo pip upgrades)
+      - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake build-essential git python3-venv python3-dev patchelf
+          sudo apt-get install -y cmake build-essential git python3-venv python3-dev patchelf ccache
+
+      - name: Setup ccache (Turbocharge future builds)
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          # 设置缓存的唯一标识符
+          key: ubuntu-openvino-n6000-${{ github.sha }}
+          restore-keys: |
+            ubuntu-openvino-n6000-
+          max-size: 5G
 
       - name: Create and activate Python virtualenv for build
         run: |
           python3 -m venv .venv
           echo "${GITHUB_WORKSPACE}/.venv/bin" >> $GITHUB_PATH
-          # 使用 venv 中的 python 明确升级 pip/setuptools/wheel（不会触碰系统包）
-          ${GITHUB_WORKSPACE}/.venv/bin/python -m pip install --upgrade pip setuptools wheel
+          # 补充 pybind11，确保 GenAI 的 C++ 接口能完美桥接到 Python
+          ${GITHUB_WORKSPACE}/.venv/bin/python -m pip install --upgrade pip setuptools wheel pybind11 cython
 
       - name: Clone OpenVINO Source
         run: |
@@ -37,8 +46,11 @@ jobs:
         run: |
           cd openvino
           mkdir build && cd build
+          # 注入 ccache 拦截器，自动接管编译缓存
           cmake .. \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DENABLE_AVX2=OFF \
             -DENABLE_AVX512F=OFF \
             -DENABLE_PYTHON=ON \
@@ -51,19 +63,26 @@ jobs:
           git clone --recurse-submodules https://github.com/openvinotoolkit/openvino.genai.git
           cd openvino.genai
           mkdir build && cd build
+          # 同样注入 ccache 拦截器
           cmake .. \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DOpenVINO_DIR=${GITHUB_WORKSPACE}/openvino/build \
             -DENABLE_PYTHON=ON \
-            -DPYTHON_EXECUTABLE=${GITHUB_WORKSPACE}/.venv/bin/python \
-            -DENABLE_WHEEL=ON
+            -DPYTHON_EXECUTABLE=${GITHUB_WORKSPACE}/.venv/bin/python
           make -j$(nproc)
+          
+          # 核心修复点：强制进入 python 源码目录，手动执行打包命令
+          cd ${GITHUB_WORKSPACE}/openvino.genai/src/python
+          ${GITHUB_WORKSPACE}/.venv/bin/python setup.py bdist_wheel
           
       - name: Collect and Upload Wheels
         uses: actions/upload-artifact@v4
         with:
           name: n6000_openvino_wheels
+          # 精准抓取两个不同目录下生成的 whl 文件
           path: |
-            openvino/build/**/*.whl
-            openvino.genai/build/**/*.whl
+            openvino/build/wheels/**/*.whl
+            openvino.genai/src/python/dist/**/*.whl
           compression-level: 9
