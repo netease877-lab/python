@@ -1,7 +1,16 @@
 name: Compile N6000 OpenVINO Wheels
 
 on:
+  push:
+    branches:
+      - '**'
+  pull_request:
   workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.12"
+  OPENVINO_REF: "2026.2.0"
+  OPENVINO_EXPECTED_WHEEL: "openvino-2026.2.0-21423-cp312-cp312-manylinux_2_39_x86_64.whl"
 
 jobs:
   build-wheels:
@@ -19,7 +28,12 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake build-essential git python3-venv python3-dev patchelf ccache ocl-icd-opencl-dev
+          sudo apt-get install -y cmake build-essential git python3-venv python3-dev patchelf ccache ocl-icd-opencl-dev ninja-build
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Setup ccache (fixed key ensures persistent reuse)
         uses: hendrikmuhs/ccache-action@v1.2
@@ -31,26 +45,29 @@ jobs:
 
       - name: Configure ccache environment (VERY IMPORTANT)
         run: |
-          export CCACHE_BASEDIR="$GITHUB_WORKSPACE"
-          export CCACHE_NOHASHDIR=1
-          export CCACHE_SLOPPINESS=time_macros,file_macro,include_file_mtime
+          {
+            echo "CCACHE_BASEDIR=${GITHUB_WORKSPACE}"
+            echo "CCACHE_NOHASHDIR=1"
+            echo "CCACHE_SLOPPINESS=time_macros,file_macro,include_file_mtime"
+          } >> "${GITHUB_ENV}"
           ccache -p || true
-        shell: bash
 
       - name: Create Python venv
         run: |
-          python3 -m venv .venv
-          echo "${GITHUB_WORKSPACE}/.venv/bin" >> $GITHUB_PATH
+          python -m venv .venv
+          echo "${GITHUB_WORKSPACE}/.venv/bin" >> "$GITHUB_PATH"
           ${GITHUB_WORKSPACE}/.venv/bin/python -m pip install --upgrade pip setuptools wheel build pybind11 cython pybind11-stubgen==2.5.5
 
       - name: Clone OpenVINO
-        run: git clone --recurse-submodules https://github.com/openvinotoolkit/openvino.git
+        run: |
+          git clone --recurse-submodules --branch "${OPENVINO_REF}" https://github.com/openvinotoolkit/openvino.git
 
-      - name: Build OpenVINO with working ccache
+      - name: Build OpenVINO wheel with working ccache
         run: |
           cd openvino
           mkdir build && cd build
           cmake .. \
+            -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER_LAUNCHER=/usr/bin/ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=/usr/bin/ccache \
@@ -61,35 +78,96 @@ jobs:
             -DENABLE_PYTHON=ON \
             -DPYTHON_EXECUTABLE=${GITHUB_WORKSPACE}/.venv/bin/python \
             -DENABLE_WHEEL=ON
-          
+
           echo "===== CCACHE STATUS BEFORE BUILD ====="
           ccache -s || true
 
-          make -j$(nproc)
+          ninja -j"$(nproc)"
 
           echo "===== CCACHE STATUS AFTER BUILD ====="
           ccache -s || true
 
       - name: Clone OpenVINO GenAI
-        run: git clone --recurse-submodules https://github.com/openvinotoolkit/openvino.genai.git
+        run: |
+          git clone --recurse-submodules --branch "${OPENVINO_REF}" https://github.com/openvinotoolkit/openvino.genai.git
 
-      - name: Patch GenAI pyproject (fix pip dependency issue)
+      - name: Patch GenAI pyproject (keep [project], fix backend deps)
         run: |
           cd openvino.genai
-          echo "[build-system]" > pyproject.toml
-          echo 'requires = ["py-build-cmake", "wheel", "setuptools"]' >> pyproject.toml
-          echo 'build-backend = "py_build_cmake.build"' >> pyproject.toml
+          python - <<'PY'
+          from pathlib import Path
 
-      - name: Build GenAI wheels
+          pyproject = Path('pyproject.toml')
+          content = pyproject.read_text(encoding='utf-8')
+
+          if '[project]' not in content:
+              raise SystemExit('Expected [project] section in openvino.genai/pyproject.toml')
+
+          lines = content.splitlines()
+          out = []
+          i = 0
+          replaced = False
+          while i < len(lines):
+              line = lines[i]
+              if line.strip() == '[build-system]':
+                  replaced = True
+                  out.extend([
+                      '[build-system]',
+                      'requires = ["py-build-cmake", "wheel", "setuptools"]',
+                      'build-backend = "py_build_cmake.build"',
+                      '',
+                  ])
+                  i += 1
+                  while i < len(lines) and not lines[i].startswith('['):
+                      i += 1
+                  continue
+              out.append(line)
+              i += 1
+
+          if not replaced:
+              out = [
+                  '[build-system]',
+                  'requires = ["py-build-cmake", "wheel", "setuptools"]',
+                  'build-backend = "py_build_cmake.build"',
+                  '',
+                  *out,
+              ]
+
+          pyproject.write_text('\n'.join(out).rstrip() + '\n', encoding='utf-8')
+          PY
+
+      - name: Build GenAI wheel
         run: |
           cd openvino.genai
           export OpenVINO_DIR=${GITHUB_WORKSPACE}/openvino/build
           ${GITHUB_WORKSPACE}/.venv/bin/python -m build --wheel
 
-      - name: Upload wheels
+      - name: Validate and collect required 2 wheel files
+        run: |
+          mkdir -p out_wheels
+
+          OPENVINO_WHEEL_PATH="$(find openvino/build -type f -name "${OPENVINO_EXPECTED_WHEEL}" | head -n1)"
+          if [ -z "${OPENVINO_WHEEL_PATH}" ]; then
+            echo "❌ Missing expected OpenVINO wheel: ${OPENVINO_EXPECTED_WHEEL}"
+            find openvino/build -type f -name '*.whl' -print || true
+            exit 1
+          fi
+
+          GENAI_WHEEL_PATH="$(find openvino.genai/dist -type f -name 'openvino_genai-*.whl' | head -n1)"
+          if [ -z "${GENAI_WHEEL_PATH}" ]; then
+            echo "❌ Missing expected GenAI wheel: openvino_genai-*.whl"
+            find openvino.genai/dist -type f -name '*.whl' -print || true
+            exit 1
+          fi
+
+          cp "${OPENVINO_WHEEL_PATH}" out_wheels/
+          cp "${GENAI_WHEEL_PATH}" out_wheels/
+
+          echo "✅ Collected wheel files:"
+          ls -lh out_wheels
+
+      - name: Upload required wheels
         uses: actions/upload-artifact@v4
         with:
           name: n6000_openvino_wheels
-          path: |
-            openvino/build/wheels/**/*.whl
-            openvino.genai/dist/**/*.whl
+          path: out_wheels/*.whl
