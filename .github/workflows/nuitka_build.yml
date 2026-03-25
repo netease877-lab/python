@@ -35,8 +35,8 @@ jobs:
         run: |
           python3 -m venv .venv
           echo "${GITHUB_WORKSPACE}/.venv/bin" >> $GITHUB_PATH
-          # 补充 pybind11，确保 GenAI 的 C++ 接口能完美桥接到 Python
-          ${GITHUB_WORKSPACE}/.venv/bin/python -m pip install --upgrade pip setuptools wheel pybind11 cython
+          # 补充 pybind11, cython 桥接库，以及提示缺失的 stubgen
+          ${GITHUB_WORKSPACE}/.venv/bin/python -m pip install --upgrade pip setuptools wheel pybind11 cython pybind11-stubgen==2.5.5
 
       - name: Clone OpenVINO Source
         run: |
@@ -63,26 +63,24 @@ jobs:
           git clone --recurse-submodules https://github.com/openvinotoolkit/openvino.genai.git
           cd openvino.genai
           mkdir build && cd build
-          # 同样注入 ccache 拦截器
+          # 同样注入 ccache 拦截器，并开启 ENABLE_WHEEL 让它自己打包
           cmake .. \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DOpenVINO_DIR=${GITHUB_WORKSPACE}/openvino/build \
             -DENABLE_PYTHON=ON \
-            -DPYTHON_EXECUTABLE=${GITHUB_WORKSPACE}/.venv/bin/python
+            -DPYTHON_EXECUTABLE=${GITHUB_WORKSPACE}/.venv/bin/python \
+            -DENABLE_WHEEL=ON
           make -j$(nproc)
-          
-          # 核心修复点：强制进入 python 源码目录，手动执行打包命令
-          cd ${GITHUB_WORKSPACE}/openvino.genai/src/python
-          ${GITHUB_WORKSPACE}/.venv/bin/python setup.py bdist_wheel
           
       - name: Collect and Upload Wheels
         uses: actions/upload-artifact@v4
         with:
           name: n6000_openvino_wheels
-          # 精准抓取两个不同目录下生成的 whl 文件
+          # 精准抓取生成的 whl 文件
           path: |
             openvino/build/wheels/**/*.whl
-            openvino.genai/src/python/dist/**/*.whl
+            openvino.genai/build/wheels/**/*.whl
+            openvino.genai/build/**/*.whl
           compression-level: 9
