@@ -1,46 +1,45 @@
 name: Compile N6000 OpenVINO Wheels
 
 on:
-  workflow_dispatch: 
+  workflow_dispatch:
 
 jobs:
   build-wheels:
     runs-on: ubuntu-latest
-    
+
     steps:
-      - name: Free up disk space (Critical for massive C++ builds)
+      - name: Free up disk space
         run: |
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /usr/local/lib/android
           sudo rm -rf /opt/ghc
           sudo rm -rf /opt/hostedtoolcache/CodeQL
           sudo apt-get clean
-          
+
       - name: Install Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake build-essential git python3-venv python3-dev patchelf ccache
 
-      - name: Setup ccache (Turbocharge future builds)
+      - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: ubuntu-openvino-n6000-${{ github.sha }}
+          key: ccache-ubuntu-openvino-n6000
           restore-keys: |
-            ubuntu-openvino-n6000-
+            ccache-ubuntu-openvino-
           max-size: 5G
 
-      - name: Create and activate Python virtualenv for build
+      - name: Create Python venv
         run: |
           python3 -m venv .venv
           echo "${GITHUB_WORKSPACE}/.venv/bin" >> $GITHUB_PATH
-          # 核心：加入官方 build 模块，用于强行生成 whl
-          ${GITHUB_WORKSPACE}/.venv/bin/python -m pip install --upgrade pip setuptools wheel pybind11 cython pybind11-stubgen==2.5.5 build
+          ${GITHUB_WORKSPACE}/.venv/bin/python -m pip install --upgrade pip setuptools wheel build pybind11 cython pybind11-stubgen==2.5.5
 
-      - name: Clone OpenVINO Source
+      - name: Clone OpenVINO
         run: |
           git clone --recurse-submodules https://github.com/openvinotoolkit/openvino.git
-          
-      - name: Build OpenVINO (Force disable AVX2 for N6000)
+
+      - name: Build OpenVINO (no AVX2)
         run: |
           cd openvino
           mkdir build && cd build
@@ -54,34 +53,28 @@ jobs:
             -DPYTHON_EXECUTABLE=${GITHUB_WORKSPACE}/.venv/bin/python \
             -DENABLE_WHEEL=ON
           make -j$(nproc)
-          
-      - name: Clone and Build OpenVINO GenAI
+
+      - name: Clone OpenVINO GenAI
         run: |
           git clone --recurse-submodules https://github.com/openvinotoolkit/openvino.genai.git
+
+      - name: Patch GenAI pyproject (Fix wrong dependency)
+        run: |
           cd openvino.genai
-          mkdir build && cd build
-          cmake .. \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-            -DOpenVINO_DIR=${GITHUB_WORKSPACE}/openvino/build \
-            -DENABLE_PYTHON=ON \
-            -DPYTHON_EXECUTABLE=${GITHUB_WORKSPACE}/.venv/bin/python \
-            -DENABLE_WHEEL=ON
-          make -j$(nproc)
-          
-          # 必杀技：直接用 Python 官方打包工具深入目录，强行提取 GenAI 的 whl 包
-          cd ${GITHUB_WORKSPACE}/openvino.genai
+          echo "[build-system]" > pyproject.toml
+          echo 'requires = ["py-build-cmake", "wheel", "setuptools"]' >> pyproject.toml
+          echo 'build-backend = "py_build_cmake.build"' >> pyproject.toml
+
+      - name: Build GenAI
+        run: |
+          cd openvino.genai
           export OpenVINO_DIR=${GITHUB_WORKSPACE}/openvino/build
           ${GITHUB_WORKSPACE}/.venv/bin/python -m build --wheel
-          
-      - name: Collect and Upload Wheels
+
+      - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
           name: n6000_openvino_wheels
-          # 终极全量抓取，将 Python 吐在 dist 目录下的包一网打尽
           path: |
             openvino/build/wheels/**/*.whl
             openvino.genai/dist/**/*.whl
-            openvino.genai/build/wheels/**/*.whl
-          compression-level: 9
