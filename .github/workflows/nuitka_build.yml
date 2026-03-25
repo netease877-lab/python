@@ -1,6 +1,5 @@
 name: Compile N6000 OpenVINO Wheels
 
-# 允许在 GitHub 网页上手动点击运行按钮触发
 on:
   workflow_dispatch: 
 
@@ -25,7 +24,6 @@ jobs:
       - name: Setup ccache (Turbocharge future builds)
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          # 设置缓存的唯一标识符
           key: ubuntu-openvino-n6000-${{ github.sha }}
           restore-keys: |
             ubuntu-openvino-n6000-
@@ -35,8 +33,8 @@ jobs:
         run: |
           python3 -m venv .venv
           echo "${GITHUB_WORKSPACE}/.venv/bin" >> $GITHUB_PATH
-          # 补充 pybind11, cython 桥接库，以及提示缺失的 stubgen
-          ${GITHUB_WORKSPACE}/.venv/bin/python -m pip install --upgrade pip setuptools wheel pybind11 cython pybind11-stubgen==2.5.5
+          # 核心：加入官方 build 模块，用于强行生成 whl
+          ${GITHUB_WORKSPACE}/.venv/bin/python -m pip install --upgrade pip setuptools wheel pybind11 cython pybind11-stubgen==2.5.5 build
 
       - name: Clone OpenVINO Source
         run: |
@@ -46,7 +44,6 @@ jobs:
         run: |
           cd openvino
           mkdir build && cd build
-          # 注入 ccache 拦截器，自动接管编译缓存
           cmake .. \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
@@ -63,7 +60,6 @@ jobs:
           git clone --recurse-submodules https://github.com/openvinotoolkit/openvino.genai.git
           cd openvino.genai
           mkdir build && cd build
-          # 同样注入 ccache 拦截器，并开启 ENABLE_WHEEL 让它自己打包
           cmake .. \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
@@ -74,13 +70,18 @@ jobs:
             -DENABLE_WHEEL=ON
           make -j$(nproc)
           
+          # 必杀技：直接用 Python 官方打包工具深入目录，强行提取 GenAI 的 whl 包
+          cd ${GITHUB_WORKSPACE}/openvino.genai
+          export OpenVINO_DIR=${GITHUB_WORKSPACE}/openvino/build
+          ${GITHUB_WORKSPACE}/.venv/bin/python -m build --wheel
+          
       - name: Collect and Upload Wheels
         uses: actions/upload-artifact@v4
         with:
           name: n6000_openvino_wheels
-          # 精准抓取生成的 whl 文件
+          # 终极全量抓取，将 Python 吐在 dist 目录下的包一网打尽
           path: |
             openvino/build/wheels/**/*.whl
+            openvino.genai/dist/**/*.whl
             openvino.genai/build/wheels/**/*.whl
-            openvino.genai/build/**/*.whl
           compression-level: 9
