@@ -19,15 +19,23 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake build-essential git python3-venv python3-dev patchelf ccache
+          sudo apt-get install -y cmake build-essential git python3-venv python3-dev patchelf ccache ocl-icd-opencl-dev
 
-      - name: Setup ccache
+      - name: Setup ccache (fixed key ensures persistent reuse)
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: ccache-ubuntu-openvino-n6000
+          key: ccache-openvino-n6000
           restore-keys: |
-            ccache-ubuntu-openvino-
-          max-size: 5G
+            ccache-openvino-
+          max-size: 8G
+
+      - name: Configure ccache environment (VERY IMPORTANT)
+        run: |
+          export CCACHE_BASEDIR="$GITHUB_WORKSPACE"
+          export CCACHE_NOHASHDIR=1
+          export CCACHE_SLOPPINESS=time_macros,file_macro,include_file_mtime
+          ccache -p || true
+        shell: bash
 
       - name: Create Python venv
         run: |
@@ -36,36 +44,43 @@ jobs:
           ${GITHUB_WORKSPACE}/.venv/bin/python -m pip install --upgrade pip setuptools wheel build pybind11 cython pybind11-stubgen==2.5.5
 
       - name: Clone OpenVINO
-        run: |
-          git clone --recurse-submodules https://github.com/openvinotoolkit/openvino.git
+        run: git clone --recurse-submodules https://github.com/openvinotoolkit/openvino.git
 
-      - name: Build OpenVINO (no AVX2)
+      - name: Build OpenVINO with working ccache
         run: |
           cd openvino
           mkdir build && cd build
           cmake .. \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_C_COMPILER_LAUNCHER=/usr/bin/ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=/usr/bin/ccache \
+            -DCMAKE_C_FLAGS="-fdebug-prefix-map=${GITHUB_WORKSPACE}=." \
+            -DCMAKE_CXX_FLAGS="-fdebug-prefix-map=${GITHUB_WORKSPACE}=." \
             -DENABLE_AVX2=OFF \
             -DENABLE_AVX512F=OFF \
             -DENABLE_PYTHON=ON \
             -DPYTHON_EXECUTABLE=${GITHUB_WORKSPACE}/.venv/bin/python \
             -DENABLE_WHEEL=ON
+          
+          echo "===== CCACHE STATUS BEFORE BUILD ====="
+          ccache -s || true
+
           make -j$(nproc)
 
-      - name: Clone OpenVINO GenAI
-        run: |
-          git clone --recurse-submodules https://github.com/openvinotoolkit/openvino.genai.git
+          echo "===== CCACHE STATUS AFTER BUILD ====="
+          ccache -s || true
 
-      - name: Patch GenAI pyproject (Fix wrong dependency)
+      - name: Clone OpenVINO GenAI
+        run: git clone --recurse-submodules https://github.com/openvinotoolkit/openvino.genai.git
+
+      - name: Patch GenAI pyproject (fix pip dependency issue)
         run: |
           cd openvino.genai
           echo "[build-system]" > pyproject.toml
           echo 'requires = ["py-build-cmake", "wheel", "setuptools"]' >> pyproject.toml
           echo 'build-backend = "py_build_cmake.build"' >> pyproject.toml
 
-      - name: Build GenAI
+      - name: Build GenAI wheels
         run: |
           cd openvino.genai
           export OpenVINO_DIR=${GITHUB_WORKSPACE}/openvino/build
