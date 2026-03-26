@@ -45,8 +45,6 @@ jobs:
 
       - name: Clone OpenVINO
         run: git clone --recurse-submodules git clone --recursive https://github.com/openvinotoolkit/openvino.git -b releases/2026.0
-        run: git clone https://github.com/openvinotoolkit/openvino_contrib.git -b releases/2026.0
-        run: git clone https://github.com/openvinotoolkit/openvino_extra.git -b releases/2026.0
 
       - name: Build OpenVINO with working ccache
         run: |
