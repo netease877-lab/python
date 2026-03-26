@@ -31,9 +31,9 @@ jobs:
 
       - name: Configure ccache environment (VERY IMPORTANT)
         run: |
-          export CCACHE_BASEDIR="$GITHUB_WORKSPACE"
-          export CCACHE_NOHASHDIR=1
-          export CCACHE_SLOPPINESS=time_macros,file_macro,include_file_mtime
+          echo "CCACHE_BASEDIR=$GITHUB_WORKSPACE" >> $GITHUB_ENV
+          echo "CCACHE_NOHASHDIR=1" >> $GITHUB_ENV
+          echo "CCACHE_SLOPPINESS=time_macros,file_macro,include_file_mtime" >> $GITHUB_ENV
           ccache -p || true
         shell: bash
 
@@ -42,6 +42,12 @@ jobs:
           python3 -m venv .venv
           echo "${GITHUB_WORKSPACE}/.venv/bin" >> $GITHUB_PATH
           ${GITHUB_WORKSPACE}/.venv/bin/python -m pip install --upgrade pip setuptools wheel build pybind11 cython pybind11-stubgen==2.5.5
+
+      - name: Verify ccache Environment
+        run: |
+          echo "CCACHE_BASEDIR: $CCACHE_BASEDIR"
+          echo "CCACHE_NOHASHDIR: $CCACHE_NOHASHDIR"
+          ccache -p | grep -E "base_dir|no_hash_dir|sloppiness" || true
 
       - name: Clone OpenVINO
         run: git clone --recurse-submodules https://github.com/openvinotoolkit/openvino.git -b releases/2026/0
@@ -76,9 +82,17 @@ jobs:
       - name: Patch GenAI pyproject (fix pip dependency issue)
         run: |
           cd openvino.genai
-          echo "[build-system]" > pyproject.toml
-          echo 'requires = ["py-build-cmake", "wheel", "setuptools"]' >> pyproject.toml
-          echo 'build-backend = "py_build_cmake.build"' >> pyproject.toml
+          cat <<EOF > pyproject.toml
+          [project]
+          name = "openvino-genai"
+          version = "2026.0.0"
+          description = "OpenVINO GenAI binding"
+          dependencies = []
+
+          [build-system]
+          requires = ["py-build-cmake", "wheel", "setuptools"]
+          build-backend = "py_build_cmake.build"
+          EOF
 
       - name: Build GenAI wheels
         run: |
