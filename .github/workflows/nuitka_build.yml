@@ -79,26 +79,19 @@ jobs:
       - name: Clone OpenVINO GenAI
         run: git clone --recurse-submodules https://github.com/openvinotoolkit/openvino.genai.git
 
-      - name: Patch GenAI pyproject (fix pip dependency issue)
-        run: |
-          cd openvino.genai
-          cat <<EOF > pyproject.toml
-          [project]
-          name = "openvino-genai"
-          version = "2026.0.0"
-          description = "OpenVINO GenAI binding"
-          dependencies = []
-
-          [build-system]
-          requires = ["py-build-cmake", "wheel", "setuptools"]
-          build-backend = "py_build_cmake.build"
-          EOF
-
       - name: Build GenAI wheels
         run: |
           cd openvino.genai
-          export OpenVINO_DIR=${GITHUB_WORKSPACE}/openvino/build
-          ${GITHUB_WORKSPACE}/.venv/bin/python -m build --wheel
+          mkdir build && cd build
+          cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DOpenVINO_DIR=${GITHUB_WORKSPACE}/openvino/build \
+            -DENABLE_PYTHON=ON \
+            -DENABLE_WHEEL=ON \
+            -DPYTHON_EXECUTABLE=${GITHUB_WORKSPACE}/.venv/bin/python
+          make -j$(nproc)
 
       - name: Upload wheels
         uses: actions/upload-artifact@v4
@@ -106,4 +99,4 @@ jobs:
           name: n6000_openvino_wheels
           path: |
             openvino/build/wheels/**/*.whl
-            openvino.genai/dist/**/*.whl
+            openvino.genai/build/wheels/**/*.whl
