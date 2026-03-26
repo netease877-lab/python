@@ -91,11 +91,11 @@ jobs:
             -DENABLE_WHEEL=ON \
             -DPYTHON_EXECUTABLE=${GITHUB_WORKSPACE}/.venv/bin/python
           make -j$(nproc)
+          make wheels || true
 
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
           name: n6000_openvino_wheels
           path: |
-            openvino/build/wheels/**/*.whl
-            openvino.genai/build/wheels/**/*.whl
+            **/*.whl
