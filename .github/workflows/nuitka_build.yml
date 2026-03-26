@@ -65,33 +65,24 @@ jobs:
             -DPYTHON_EXECUTABLE=${GITHUB_WORKSPACE}/.venv/bin/python \
             -DENABLE_WHEEL=ON
           
-          echo "===== CCACHE STATUS BEFORE BUILD ====="
           ccache -s || true
-
           make -j$(nproc)
-
-          echo "===== CCACHE STATUS AFTER BUILD ====="
           ccache -s || true
+
+      - name: Install Built OpenVINO Core
+        run: |
+          python -m pip install openvino/build/wheels/*.whl
 
       - name: Clone OpenVINO GenAI
         run: git clone --recurse-submodules https://github.com/openvinotoolkit/openvino.genai.git -b releases/2026/0
 
-      - name: Build GenAI wheels
+      - name: Build GenAI wheels (Native Build)
         run: |
           cd openvino.genai
-          mkdir build && cd build
-          cmake .. \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-            -DCMAKE_C_FLAGS="-fdebug-prefix-map=${GITHUB_WORKSPACE}=." \
-            -DCMAKE_CXX_FLAGS="-fdebug-prefix-map=${GITHUB_WORKSPACE}=." \
-            -DOpenVINO_DIR=${GITHUB_WORKSPACE}/openvino/build \
-            -DENABLE_PYTHON=ON \
-            -DENABLE_WHEEL=ON \
-            -DPYTHON_EXECUTABLE=${GITHUB_WORKSPACE}/.venv/bin/python
-          make -j$(nproc)
-          make wheels || true
+          export OpenVINO_DIR=${GITHUB_WORKSPACE}/openvino/build
+          export CMAKE_C_COMPILER_LAUNCHER=ccache
+          export CMAKE_CXX_COMPILER_LAUNCHER=ccache
+          python -m build --wheel --no-isolation
 
       - name: Upload wheels
         uses: actions/upload-artifact@v4
