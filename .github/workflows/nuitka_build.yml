@@ -55,8 +55,8 @@ jobs:
           mkdir build && cd build
           cmake .. \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_C_COMPILER_LAUNCHER=/usr/bin/ccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=/usr/bin/ccache \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_C_FLAGS="-fdebug-prefix-map=${GITHUB_WORKSPACE}=." \
             -DCMAKE_CXX_FLAGS="-fdebug-prefix-map=${GITHUB_WORKSPACE}=." \
             -DENABLE_AVX2=OFF \
@@ -74,7 +74,7 @@ jobs:
           ccache -s || true
 
       - name: Clone OpenVINO GenAI
-        run: git clone --recurse-submodules https://github.com/openvinotoolkit/openvino.genai.git
+        run: git clone --recurse-submodules https://github.com/openvinotoolkit/openvino.genai.git -b releases/2026/0
 
       - name: Build GenAI wheels
         run: |
@@ -84,6 +84,8 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_C_FLAGS="-fdebug-prefix-map=${GITHUB_WORKSPACE}=." \
+            -DCMAKE_CXX_FLAGS="-fdebug-prefix-map=${GITHUB_WORKSPACE}=." \
             -DOpenVINO_DIR=${GITHUB_WORKSPACE}/openvino/build \
             -DENABLE_PYTHON=ON \
             -DENABLE_WHEEL=ON \
