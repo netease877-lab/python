@@ -43,12 +43,6 @@ jobs:
           echo "${GITHUB_WORKSPACE}/.venv/bin" >> $GITHUB_PATH
           ${GITHUB_WORKSPACE}/.venv/bin/python -m pip install --upgrade pip setuptools wheel build pybind11 cython pybind11-stubgen==2.5.5
 
-      - name: Verify ccache Environment
-        run: |
-          echo "CCACHE_BASEDIR: $CCACHE_BASEDIR"
-          echo "CCACHE_NOHASHDIR: $CCACHE_NOHASHDIR"
-          ccache -p | grep -E "base_dir|no_hash_dir|sloppiness" || true
-
       - name: Clone OpenVINO
         run: git clone --recurse-submodules https://github.com/openvinotoolkit/openvino.git -b releases/2026/0
 
