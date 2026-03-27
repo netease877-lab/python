@@ -82,6 +82,7 @@ jobs:
           export OpenVINO_DIR=${GITHUB_WORKSPACE}/openvino/build
           export CMAKE_C_COMPILER_LAUNCHER=ccache
           export CMAKE_CXX_COMPILER_LAUNCHER=ccache
+          export CMAKE_BUILD_PARALLEL_LEVEL=1
           python -m build --wheel --no-isolation
 
       - name: Upload wheels
