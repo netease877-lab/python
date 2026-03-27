@@ -44,7 +44,7 @@ jobs:
         run: |
           python3 -m venv .venv
           echo "${GITHUB_WORKSPACE}/.venv/bin" >> $GITHUB_PATH
-          ${GITHUB_WORKSPACE}/.venv/bin/python -m pip install --upgrade pip setuptools wheel build pybind11 cython pybind11-stubgen==2.5.5 py-build-cmake==0.5.0 "cmake>=3.23.0"
+          ${GITHUB_WORKSPACE}/.venv/bin/python -m pip install --upgrade pip setuptools wheel build pybind11 cython pybind11-stubgen==2.5.5 py-build-cmake==0.5.0 "cmake~=3.23.0"
 
       - name: Clone OpenVINO
         run: git clone --recurse-submodules https://github.com/openvinotoolkit/openvino.git -b releases/2026/0
