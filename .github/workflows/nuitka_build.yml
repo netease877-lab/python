@@ -51,6 +51,7 @@ jobs:
 
       - name: Build OpenVINO with working ccache
         run: |
+          df -h
           cd openvino
           mkdir build && cd build
           cmake .. \
@@ -68,26 +69,41 @@ jobs:
           ccache -s || true
           make -j$(nproc)
           ccache -s || true
+          df -h
 
       - name: Install Built OpenVINO Core
         run: |
           python -m pip install openvino/build/wheels/*.whl
+          # Verify installation and find OpenVINO_DIR
+          python -c "import openvino; print(f'OpenVINO version: {openvino.__version__}')"
+          # Locate OpenVINOConfig.cmake
+          OV_CONFIG_PATH=$(find ${GITHUB_WORKSPACE}/openvino/build -name "OpenVINOConfig.cmake" | head -n 1)
+          OV_DIR=$(dirname "$OV_CONFIG_PATH")
+          echo "DETECTED_OV_DIR=$OV_DIR" >> $GITHUB_ENV
+          echo "Found OpenVINOConfig.cmake at: $OV_CONFIG_PATH"
 
       - name: Clone OpenVINO GenAI
-        run: git clone --recurse-submodules https://github.com/openvinotoolkit/openvino.genai.git -b releases/2026/0
+        run: |
+          git clone --recurse-submodules https://github.com/openvinotoolkit/openvino.genai.git -b releases/2026/0
+          cd openvino.genai
+          git submodule update --init --recursive
 
       - name: Build GenAI wheels (Native Build)
         run: |
+          df -h
           cd openvino.genai
-          export OpenVINO_DIR=${GITHUB_WORKSPACE}/openvino/build
+          export OpenVINO_DIR=${{ env.DETECTED_OV_DIR }}
           export CMAKE_C_COMPILER_LAUNCHER=ccache
           export CMAKE_CXX_COMPILER_LAUNCHER=ccache
           export CMAKE_BUILD_PARALLEL_LEVEL=1
+          echo "Using OpenVINO_DIR: $OpenVINO_DIR"
           python -m build --wheel --no-isolation
+          df -h
 
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
           name: n6000_openvino_wheels
           path: |
-            **/*.whl
+            **/wheels/*.whl
+            openvino.genai/dist/*.whl
