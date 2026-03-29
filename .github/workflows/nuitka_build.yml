@@ -49,11 +49,11 @@ jobs:
       - name: Clone OpenVINO
         run: git clone --recurse-submodules --depth 1 https://github.com/openvinotoolkit/openvino.git -b releases/2026/0
 
-      - name: Build OpenVINO with working ccache
+      - name: Build and Install OpenVINO Core
         run: |
           df -h
           cd openvino
-          mkdir build && cd build
+          mkdir -p build && cd build
           cmake .. \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
@@ -70,10 +70,7 @@ jobs:
           make -j$(nproc)
           ccache -s || true
           df -h
-
-      - name: Install Built OpenVINO Core
-        run: |
-          python -m pip install openvino/build/wheels/*.whl
+          python -m pip install wheels/*.whl
           # Verify installation and find OpenVINO_DIR
           python -c "import openvino; print(f'OpenVINO version: {openvino.__version__}')"
           # Locate OpenVINOConfig.cmake
@@ -82,21 +79,22 @@ jobs:
           echo "DETECTED_OV_DIR=$OV_DIR" >> $GITHUB_ENV
           echo "Found OpenVINOConfig.cmake at: $OV_CONFIG_PATH"
 
-      - name: Clone OpenVINO GenAI
+      - name: Build OpenVINO GenAI (Merged Step)
         run: |
+          df -h
+          pip list
+          # Clone GenAI with shallow strategy
           git clone --depth 1 https://github.com/openvinotoolkit/openvino.genai.git -b releases/2026/0
           cd openvino.genai
           git submodule update --init --recursive --depth 1 --jobs $(nproc)
-
-      - name: Build GenAI wheels (Native Build)
-        run: |
-          df -h
-          cd openvino.genai
+          
+          # Native Build with explicit verbose mode and strict parallelism
           export OpenVINO_DIR=${{ env.DETECTED_OV_DIR }}
           export CMAKE_C_COMPILER_LAUNCHER=ccache
           export CMAKE_CXX_COMPILER_LAUNCHER=ccache
-          export CMAKE_BUILD_PARALLEL_LEVEL=1
+          # Force python -m build to be verbose and pass parallel limit
           echo "Using OpenVINO_DIR: $OpenVINO_DIR"
+          export CMAKE_BUILD_PARALLEL_LEVEL=1
           python -m build --wheel --no-isolation -vv
           df -h
 
@@ -105,5 +103,5 @@ jobs:
         with:
           name: n6000_openvino_wheels
           path: |
-            **/wheels/*.whl
+            openvino/build/wheels/*.whl
             openvino.genai/dist/*.whl
