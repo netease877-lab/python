@@ -47,7 +47,7 @@ jobs:
           ${GITHUB_WORKSPACE}/.venv/bin/python -m pip install --upgrade pip setuptools wheel build pybind11 cython pybind11-stubgen==2.5.5 py-build-cmake==0.5.0 "cmake~=3.23.0"
 
       - name: Clone OpenVINO
-        run: git clone --recurse-submodules https://github.com/openvinotoolkit/openvino.git -b releases/2026/0
+        run: git clone --recurse-submodules --depth 1 https://github.com/openvinotoolkit/openvino.git -b releases/2026/0
 
       - name: Build OpenVINO with working ccache
         run: |
@@ -84,9 +84,9 @@ jobs:
 
       - name: Clone OpenVINO GenAI
         run: |
-          git clone --recurse-submodules https://github.com/openvinotoolkit/openvino.genai.git -b releases/2026/0
+          git clone --depth 1 https://github.com/openvinotoolkit/openvino.genai.git -b releases/2026/0
           cd openvino.genai
-          git submodule update --init --recursive
+          git submodule update --init --recursive --depth 1 --jobs $(nproc)
 
       - name: Build GenAI wheels (Native Build)
         run: |
@@ -97,7 +97,7 @@ jobs:
           export CMAKE_CXX_COMPILER_LAUNCHER=ccache
           export CMAKE_BUILD_PARALLEL_LEVEL=1
           echo "Using OpenVINO_DIR: $OpenVINO_DIR"
-          python -m build --wheel --no-isolation
+          python -m build --wheel --no-isolation -vv
           df -h
 
       - name: Upload wheels
