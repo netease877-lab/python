@@ -105,7 +105,8 @@ jobs:
           echo "Using OpenVINO_DIR: $OpenVINO_DIR"
           
           # Use pip wheel with max verbosity to avoid buffer issues
-          stdbuf -oL python -m pip wheel . --no-deps --no-isolation -vv --wheel-dir ./dist
+          # Note: The correct flag for pip wheel is --no-build-isolation
+          stdbuf -oL python -m pip wheel . --no-deps --no-build-isolation -vv --wheel-dir ./dist
           df -h && free -m
 
       - name: Upload wheels
