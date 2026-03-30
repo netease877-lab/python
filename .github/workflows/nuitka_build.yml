@@ -39,7 +39,7 @@ jobs:
           echo "CCACHE_DIR=${HOME}/.cache/ccache" >> $GITHUB_ENV
           echo "CCACHE_BASEDIR=$GITHUB_WORKSPACE" >> $GITHUB_ENV
           echo "CCACHE_NOHASHDIR=1" >> $GITHUB_ENV
-          echo "CCACHE_SLOPPINESS=time_macros,file_macro,include_file_mtime" >> $GITHUB_ENV
+          echo "CCACHE_SLOPPINESS=pch_defines,time_macros,file_macro,include_file_mtime" >> $GITHUB_ENV
           echo "CCACHE_COMPRESS=true" >> $GITHUB_ENV
           mkdir -p ${HOME}/.cache/ccache
           ccache -p || true
@@ -94,19 +94,36 @@ jobs:
           git submodule update --init --recursive --depth 1
           df -i && free -m
 
-      - name: Build OpenVINO GenAI Wheels
+      - name: Build OpenVINO GenAI Wheels (Manual Build Process)
         run: |
+          df -h && free -m
           cd openvino.genai
+          
           # Native Build with explicit verbose mode and strict parallelism
           export OpenVINO_DIR=${{ env.DETECTED_OV_DIR }}
           export CMAKE_C_COMPILER_LAUNCHER=ccache
           export CMAKE_CXX_COMPILER_LAUNCHER=ccache
           export CMAKE_BUILD_PARALLEL_LEVEL=1
+          
           echo "Using OpenVINO_DIR: $OpenVINO_DIR"
           
-          # Use pip wheel with max verbosity to avoid buffer issues
-          # Note: The correct flag for pip wheel is --no-build-isolation
-          stdbuf -oL python -m pip wheel . --no-deps --no-build-isolation -vv --wheel-dir ./dist
+          # 第一步：显式 CMake 配置
+          mkdir -p build && cd build
+          cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DENABLE_PYTHON=ON \
+            -DPYTHON_EXECUTABLE=${GITHUB_WORKSPACE}/.venv/bin/python \
+            -DENABLE_WHEEL=ON \
+            -DBUILD_TOKENIZERS=OFF \
+            -DENABLE_SAMPLES=OFF \
+            -DENABLE_TESTS=OFF
+          
+          # 第二步：显式并行编译 (单线程以确保不触发系统 Kill)
+          cmake --build . --config Release --parallel 1
+          
+          # 第三步：Python 包装
+          cd ..
+          python -m pip wheel . --no-deps --no-build-isolation -vv --wheel-dir ./dist
           df -h && free -m
 
       - name: Upload wheels
