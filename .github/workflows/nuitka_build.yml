@@ -84,24 +84,29 @@ jobs:
           echo "DETECTED_OV_DIR=$OV_DIR" >> $GITHUB_ENV
           echo "Found OpenVINOConfig.cmake at: $OV_CONFIG_PATH"
 
-      - name: Build OpenVINO GenAI (Merged Step)
+      - name: Clone OpenVINO GenAI
         run: |
-          df -h
-          pip list
-          # Clone GenAI with shallow strategy
+          df -h && df -i && free -m
+          # Shallow clone for efficiency
           git clone --depth 1 https://github.com/openvinotoolkit/openvino.genai.git -b releases/2026/0
           cd openvino.genai
-          git submodule update --init --recursive --depth 1 --jobs $(nproc)
-          
+          # Serial update to avoid OOM/Spikes
+          git submodule update --init --recursive --depth 1
+          df -i && free -m
+
+      - name: Build OpenVINO GenAI Wheels
+        run: |
+          cd openvino.genai
           # Native Build with explicit verbose mode and strict parallelism
           export OpenVINO_DIR=${{ env.DETECTED_OV_DIR }}
           export CMAKE_C_COMPILER_LAUNCHER=ccache
           export CMAKE_CXX_COMPILER_LAUNCHER=ccache
-          # Force python -m build to be verbose and pass parallel limit
-          echo "Using OpenVINO_DIR: $OpenVINO_DIR"
           export CMAKE_BUILD_PARALLEL_LEVEL=1
-          python -m build --wheel --no-isolation -vv
-          df -h
+          echo "Using OpenVINO_DIR: $OpenVINO_DIR"
+          
+          # Use pip wheel with max verbosity to avoid buffer issues
+          stdbuf -oL python -m pip wheel . --no-deps --no-isolation -vv --wheel-dir ./dist
+          df -h && free -m
 
       - name: Upload wheels
         uses: actions/upload-artifact@v4
