@@ -9,6 +9,7 @@ on:
 jobs:
   build-wheels:
     runs-on: ubuntu-latest
+    timeout-minutes: 360
 
     steps:
       - name: Free up disk space
@@ -25,14 +26,13 @@ jobs:
           sudo apt-get install -y cmake build-essential git python3-venv python3-dev patchelf ccache ocl-icd-opencl-dev
 
       - name: Setup ccache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ~/.cache/ccache
           key: ccache-openvino-n6000-${{ github.run_id }}
           restore-keys: |
             ccache-openvino-n6000-
             ccache-openvino-
-          save-always: true
 
       - name: Configure ccache environment (VERY IMPORTANT)
         run: |
@@ -83,6 +83,13 @@ jobs:
           OV_DIR=$(dirname "$OV_CONFIG_PATH")
           echo "DETECTED_OV_DIR=$OV_DIR" >> $GITHUB_ENV
           echo "Found OpenVINOConfig.cmake at: $OV_CONFIG_PATH"
+
+      - name: Save ccache (Mid-Job)
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: ~/.cache/ccache
+          key: ccache-openvino-n6000-${{ github.run_id }}
 
       - name: Clone OpenVINO GenAI
         run: |
