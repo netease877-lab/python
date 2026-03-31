@@ -103,6 +103,7 @@ jobs:
 
       - name: Build OpenVINO GenAI Wheels (Manual Build Process)
         run: |
+          set -x
           df -h && free -m
           cd openvino.genai
           
@@ -125,12 +126,12 @@ jobs:
             -DENABLE_SAMPLES=OFF \
             -DENABLE_TESTS=OFF
           
-          # 第二步：显式并行编译 (单线程以确保不触发系统 Kill)
+          # 第二步：显式并行编译 (单核稳定模式，耗时较长但绝对不爆内存)
           cmake --build . --config Release --parallel 1
           
           # 第三步：Python 包装
           cd ..
-          python -m pip wheel . --no-deps --no-build-isolation -vv --wheel-dir ./dist
+          python -u -m pip wheel . --no-deps --no-cache-dir --no-build-isolation -vv --wheel-dir ./dist
           df -h && free -m
 
       - name: Upload wheels
