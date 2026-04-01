@@ -61,6 +61,7 @@ jobs:
           mkdir -p build && cd build
           cmake .. \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=${GITHUB_WORKSPACE}/ov_install \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_C_FLAGS="-fdebug-prefix-map=${GITHUB_WORKSPACE}=." \
@@ -73,16 +74,15 @@ jobs:
           
           ccache -s || true
           make -j$(nproc)
+          make install
           ccache -s || true
           df -h
           python -m pip install wheels/*.whl
-          # Verify installation and find OpenVINO_DIR
+          # Verify installation and assign clean installation directory
           python -c "import openvino; print(f'OpenVINO version: {openvino.__version__}')"
-          # Locate OpenVINOConfig.cmake
-          OV_CONFIG_PATH=$(find ${GITHUB_WORKSPACE}/openvino/build -name "OpenVINOConfig.cmake" | head -n 1)
-          OV_DIR=$(dirname "$OV_CONFIG_PATH")
+          OV_DIR="${GITHUB_WORKSPACE}/ov_install/runtime/cmake"
           echo "DETECTED_OV_DIR=$OV_DIR" >> $GITHUB_ENV
-          echo "Found OpenVINOConfig.cmake at: $OV_CONFIG_PATH"
+          echo "Hardcoded OpenVINO_DIR to: $OV_DIR"
 
       - name: Save ccache (Mid-Job)
         uses: actions/cache/save@v4
