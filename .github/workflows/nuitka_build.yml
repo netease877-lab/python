@@ -108,10 +108,9 @@ jobs:
           cd openvino.genai
           
           # Native Build with explicit verbose mode and strict parallelism
-          export OpenVINO_DIR=${{ env.DETECTED_OV_DIR }}
+          export OpenVINO_DIR=$DETECTED_OV_DIR
           export CMAKE_C_COMPILER_LAUNCHER=ccache
           export CMAKE_CXX_COMPILER_LAUNCHER=ccache
-          export CMAKE_BUILD_PARALLEL_LEVEL=1
           
           echo "Using OpenVINO_DIR: $OpenVINO_DIR"
           
@@ -119,6 +118,7 @@ jobs:
           mkdir -p build && cd build
           cmake .. \
             -DCMAKE_BUILD_TYPE=Release \
+            -DOpenVINO_DIR=$DETECTED_OV_DIR \
             -DENABLE_PYTHON=ON \
             -DPYTHON_EXECUTABLE=${GITHUB_WORKSPACE}/.venv/bin/python \
             -DENABLE_WHEEL=ON \
@@ -126,8 +126,8 @@ jobs:
             -DENABLE_SAMPLES=OFF \
             -DENABLE_TESTS=OFF
           
-          # 第二步：显式并行编译 (单核稳定模式，耗时较长但绝对不爆内存)
-          cmake --build . --config Release --parallel 1
+          # 第二步：满血并行编译 (利用 C++ 核心缓存省下的资源全速冲刺)
+          cmake --build . --config Release --parallel $(nproc)
           
           # 第三步：Python 包装
           cd ..
