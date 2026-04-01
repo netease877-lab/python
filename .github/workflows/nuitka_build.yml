@@ -126,11 +126,12 @@ jobs:
             -DENABLE_SAMPLES=OFF \
             -DENABLE_TESTS=OFF
           
-          # 第二步：满血并行编译 (利用 C++ 核心缓存省下的资源全速冲刺)
-          cmake --build . --config Release --parallel $(nproc)
+          # 第二步：安全双核并发 (锁住系统最大内存冗余)
+          cmake --build . --config Release --parallel 2
           
           # 第三步：Python 包装
           cd ..
+          export CMAKE_BUILD_PARALLEL_LEVEL=2
           python -u -m pip wheel . --no-deps --no-cache-dir --no-build-isolation -vv --wheel-dir ./dist
           df -h && free -m
 
