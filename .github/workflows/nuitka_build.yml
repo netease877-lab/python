@@ -20,6 +20,11 @@ jobs:
           sudo rm -rf /opt/hostedtoolcache/CodeQL
           sudo apt-get clean
 
+      - name: Allocate Swap Space
+        uses: pierotofy/set-swap-space@master
+        with:
+          swap-size-gb: 16
+
       - name: Install Dependencies
         run: |
           sudo apt-get update
@@ -126,13 +131,15 @@ jobs:
             -DENABLE_SAMPLES=OFF \
             -DENABLE_TESTS=OFF
           
-          # 第二步：极致单核防爆并发 (保证无论何种极端情况绝对不引发服务器内存击穿而断联)
-          cmake --build . --config Release --parallel 1
+          # 第二步：极致单核防爆并发加全程实录监控 (规避 60 分钟静默超时陷阱)
+          cmake --build . --config Release --parallel 1 --verbose
           
           # 第三步：Python 包装
           cd ..
           export CMAKE_BUILD_PARALLEL_LEVEL=1
-          python -u -m pip wheel . --no-deps --no-cache-dir --no-build-isolation -vv --wheel-dir ./dist
+          export SETUPTOOLS_USE_DISTUTILS=stdlib
+          # 增加最高级别的详细输出，防止静默截杀和丢失进度
+          python -u -m pip wheel . --no-deps --no-cache-dir --no-build-isolation -vvv --wheel-dir ./dist
           df -h && free -m
 
       - name: Upload wheels
