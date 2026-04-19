@@ -1,0 +1,57 @@
+# Phantomz Base Image (可选)
+# 
+# 说明：BoxLite 直接支持 Docker Hub 上的官方镜像，无需构建自定义镜像。
+# 默认使用 debian:bookworm-slim，首次执行时安装所需工具，后续使用持久化磁盘缓存。
+#
+# 如果需要预装工具以加快首次执行速度，可以使用 Docker 构建此镜像：
+#   docker build -t phantomz-base:latest -f Dockerfile.base .
+#
+# 然后在配置中将 base_image 改为 phantomz-base:latest
+
+FROM debian:bookworm-slim
+
+LABEL maintainer="phantomz"
+LABEL description="Phantomz base image with Python, Go, Node and common tools"
+LABEL version="1.0.0"
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+
+ENV PIP_CACHE_DIR=/cache/pip
+ENV GOPATH=/cache/go
+ENV NPM_CACHE=/cache/npm
+ENV GOPROXY=https://goproxy.cn,direct
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash \
+    curl \
+    wget \
+    git \
+    jq \
+    zip \
+    unzip \
+    vim \
+    netcat-openbsd \
+    procps \
+    htop \
+    ca-certificates \
+    gnupg \
+    build-essential \
+    python3 \
+    python3-pip \
+    python3-venv \
+    golang-go \
+    nodejs \
+    npm \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+RUN mkdir -p /cache/pip /cache/go /cache/npm /workspace \
+    && chmod 777 /cache /workspace
+
+RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel
+
+WORKDIR /workspace
+
+CMD ["/bin/bash"]
